@@ -1,0 +1,6 @@
+TABLE :
+posts
+ALLOW :
+WHERE ((visability = 1 OR username = self) AND class IN (SELECT class FROM people WHERE people.username = self)) OR (class IN (SELECT class FROM people WHERE people.username = self AND people.position = 'instructor'))
+REWRITE username :
+CASE WHEN anon = 1 AND username != self AND class NOT IN (SELECT class FROM people WHERE people.username = self AND people.position = 'instructor') THEN 'anonymous' ELSE username END
