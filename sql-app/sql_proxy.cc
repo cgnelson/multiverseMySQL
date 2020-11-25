@@ -13,7 +13,7 @@ void tokenize(char *input, std::vector<std::string>& result){
 std::vector<std::string> SqlProxy::get_cols(std::string table_name){
 	std::vector<std::string> cols;
 	std::string query = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + table_name + "'";
-	sql::Connection *conn = this->server->driver->connect("tcp://127.0.0.1:3306", "demo", "casey123"); //this is kind of hacky, won't work if someone else runs it
+	sql::Connection *conn = this->server->driver->connect("tcp://127.0.0.1:3306", this->username, this->password); //this is kind of hacky, won't work if someone else runs it
 	try{
 		sql::Statement *stmt  = conn->createStatement(); 
 		sql::ResultSet *res = stmt->executeQuery(query);
@@ -318,4 +318,54 @@ void SqlProxy::execute_command(SqlUser *user, std::string command){
     if(res != NULL){
     	delete res;
     }
+}
+
+std::vector<std::string> SqlProxy::execute_commands(SqlUser *user, std::string command){
+	std::vector<std::string> result;
+	sql::Statement *stmt = NULL;
+  	sql::ResultSet *res = NULL;
+
+  	try{
+  		std::string pcommand = add_policy(user, command);
+  		if(pcommand == "panic"){
+  			return result;
+  		}
+
+        stmt = user->conn->createStatement();
+        //std::cout << "new command: " << pcommand << std::endl;
+        stmt->execute(pcommand); 
+
+        do {
+        	res = stmt->getResultSet();
+
+        	if(res != NULL){
+        		int cols = res->getMetaData()->getColumnCount();
+        		while(res->next()){
+        			std::string row = "";
+        			for(int i = 1; i <= cols; i++){
+        				row += res->getString(i);
+        				if(i != cols){
+        					row += ", ";
+        				}else{
+        					result.push_back(row);
+        				}
+        			}
+        		}
+        	}
+        }while(stmt->getMoreResults());
+
+    }catch (sql::SQLException &e) {
+    	std::cout << "Query Error: " << e.what();
+    	std::cout << " (MySQL error code: " << e.getErrorCode();
+    	std::cout << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+    }
+
+    if(stmt != NULL){
+    	delete stmt;
+    }
+    if(res != NULL){
+    	delete res;
+    }
+
+    return result;
 }

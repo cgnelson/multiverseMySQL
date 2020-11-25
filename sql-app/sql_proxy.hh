@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <string.h>
+#include <pthread.h>
 
 #include <cppconn/exception.h>
 #include <cppconn/resultset.h>
@@ -22,6 +23,12 @@ public:
 
 	//manages connections to the mysql server
 	SqlServer *server;
+
+	//username and password that the proxy uses
+	std::string username;
+	std::string password;
+
+	std::vector<pthread_t> clients;
 
 	//keeps track of column names for tables in the privacy policy
 	std::unordered_map<std::string, std::vector<std::string>> privacySchema;
@@ -71,9 +78,13 @@ public:
 
 	void execute_command(SqlUser *user, std::string command);
 
-	SqlProxy(std::string schema, std::string filename){
+	std::vector<std::string> execute_commands(SqlUser *user, std::string command);
+
+	SqlProxy(std::string schema, std::string filename, std::string username, std::string password){
 		this->schema = schema;
 		this->configFile = filename;
+		this->username = username;
+		this->password = password;
 		this->server = new SqlServer(schema);
 		parse_policy(filename);
 	}

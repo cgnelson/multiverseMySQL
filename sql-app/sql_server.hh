@@ -32,7 +32,7 @@ public:
 
 	~SqlServer(){
 		if(driver != NULL){
-			delete driver;
+			//delete driver; -> caused segfault on exit. Apparently mysql_driver library does this on exit for you?
 		}
 	}
 
