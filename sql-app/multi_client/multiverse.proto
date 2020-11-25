@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+message QueryReq {
+	string username = 1;
+	string query = 2;
+}
+
+message Row {
+	string value = 1;
+}
+
+message QueryResp {
+	repeated Row rows = 1;
+}
+
+message LoginReq {
+	string username = 1;
+	string password = 2;
+}
+
+message LoginResp {
+	bool success = 1;
+}
+
+message DisconnectReq {
+	string username = 1;
+}
+
+message DisconnectResp {
+	bool success = 1;
+}
+
+message Empty {}
+
+
+service MultiverseManager {
+	
+	rpc DoLogin(LoginReq) returns (LoginResp) {}
+
+	rpc MakeQuery(QueryReq) returns (QueryResp) {} 
+
+	rpc DisconnectUser(DisconnectReq) returns (DisconnectResp) {}
+}
