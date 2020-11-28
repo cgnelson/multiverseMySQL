@@ -2,6 +2,9 @@
 #include "sql-parser/src/util/sqlhelper.h"
 #include "sql-parser/src/sql/SelectStatement.h"
 
+bool policy = true;
+bool simplify = true;
+
 void tokenize(char *input, std::vector<std::string>& result){
 	char *word = strtok(input, " ");
 	while(word != NULL){
@@ -13,7 +16,7 @@ void tokenize(char *input, std::vector<std::string>& result){
 std::vector<std::string> SqlProxy::get_cols(std::string table_name){
 	std::vector<std::string> cols;
 	std::string query = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + table_name + "'";
-	sql::Connection *conn = this->server->driver->connect("tcp://127.0.0.1:3306", this->username, this->password); //this is kind of hacky, won't work if someone else runs it
+	sql::Connection *conn = this->server->driver->connect("tcp://127.0.0.1:3306", this->username, this->password); 
 	try{
 		sql::Statement *stmt  = conn->createStatement(); 
 		sql::ResultSet *res = stmt->executeQuery(query);
@@ -73,6 +76,13 @@ void SqlProxy::parse_policy(std::string filename){
 			tokenize((char *)line.c_str(), parsed);
 
 			tableColPolicies[table_name][col_name] = parsed;
+		}else if(parsed[0] == "MOD"){
+			parsed.clear();
+			std::getline(cfile, line);
+
+			tokenize((char *)line.c_str(), parsed);
+
+			tableUpdatePolicies[table_name] = parsed;
 		}
 		parsed.clear();
 	}
@@ -99,6 +109,88 @@ std::string SqlProxy::construct_user_policy(SqlUser *user, std::vector<std::stri
 	return result;
 }
 
+/**
+ * Pre-computes some subqueries in a user's privacy policy 
+ */
+std::string simplify_policy(std::string init_policy, SqlUser *user){
+	// Several assumptions are made when doing this optimization:
+	// 1) The policy writer has wrapped the argument to IN in parenthesis 
+	// 2) There is always a space separating IN and its argument 
+	// 3) IN statements in raw policies are always followed by a query and not hard coded values
+	// 4) The query is only selecting one column 
+	std::string policy = "";
+	size_t start = 0;
+	size_t pos = init_policy.find("IN");
+	while(pos != std::string::npos){
+		//get the query substring, assume it's wrapped in parens
+		// +1 -> "N", +2 -> " ", +3 -> "(" 
+		size_t len = pos - start;
+		std::string sub = init_policy.substr(start, len);
+		policy += sub + "IN (";
+		//construct query 
+		std::string query = "";
+		int parens = 1;
+		bool done = false;
+		size_t i = pos + 4;
+		while(!done){
+			//keep track of parenthesis to see if we've reached end of nested query
+			if(init_policy[i] == '('){
+				parens++;
+			}
+			if(init_policy[i] == ')'){
+				parens--;
+			}
+			//check if we've reachd end
+			if(parens == 0){
+				done = true; //really isn't necessary 
+				break;
+			}
+			//add character to query 
+			query += init_policy[i];
+			i++;
+		}
+		//make query 
+		std::string results = "";
+		sql::ResultSet *res;
+		sql::Statement *stmt;
+		try{
+        	stmt = user->conn->createStatement();
+        	//std::cout << query << std::endl;
+        	res = stmt->executeQuery(query); 
+        	while(res->next()){
+        		if(results != ""){
+        			results += ", ";
+        		}
+        		results += res->getString(1);
+        	}
+    	}catch (sql::SQLException &e) {
+    		std::cout << "Query Error: " << e.what();
+    		std::cout << " (MySQL error code: " << e.getErrorCode();
+    		std::cout << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+    	}
+    	if(res != NULL){
+    		delete res;
+    	}
+    	if(stmt != NULL){
+    		delete stmt;
+    	}
+    	//std::cout << results << std::endl;
+    	//add results to policy 
+    	policy += results + ")";
+    	//update starting position 
+    	start = i + 1;
+    	//look again
+    	pos = init_policy.find("IN", start);
+	}
+	//check if there us more to add
+	if(start != init_policy.length()){
+		policy += init_policy.substr(start);
+	}
+	//std::cout << "Resulting policy: " << std::endl;
+	//std::cout << policy << std::endl;
+	return policy;
+}
+
 int SqlProxy::connect_to_server(SqlUser *user){
 	int ret = this->server->make_connection(user);
 
@@ -111,7 +203,12 @@ int SqlProxy::connect_to_server(SqlUser *user){
 		auto r_it = tableRowPolicies.begin();
 		while(r_it != tableRowPolicies.end()){
 			std::string policy = construct_user_policy(user, r_it->second);
-			rowPolicies[user->activeID][r_it->first] = policy;
+			if(simplify){
+				std::string policy_simple = simplify_policy(policy, user);
+				rowPolicies[user->activeID][r_it->first] = policy_simple;
+			}else{
+				rowPolicies[user->activeID][r_it->first] = policy;
+			}
 			r_it++;
 		}
 		//Then, construct col policy for each effected col of each table for user
@@ -121,10 +218,27 @@ int SqlProxy::connect_to_server(SqlUser *user){
 			auto c_it = table_it->second.begin();
 			while(c_it != table_it->second.end()){
 				std::string policy = construct_user_policy(user, c_it->second);
-				colPolicies[user->activeID][table][c_it->first] = policy;
+				if(simplify){
+					std::string policy_simple = simplify_policy(policy, user);
+					colPolicies[user->activeID][table][c_it->first] = policy_simple;
+				}else{
+					colPolicies[user->activeID][table][c_it->first] = policy;
+				}
 				c_it++;
 			}
 			table_it++;
+		}
+		//Finally, construct update policy for each table for the user 
+		auto u_it = tableUpdatePolicies.begin();
+		while(u_it != tableUpdatePolicies.end()){
+			std::string policy = construct_user_policy(user, u_it->second);
+			if(simplify){
+				std::string policy_simple = simplify_policy(policy, user);
+				updatePolicies[user->activeID][u_it->first] = policy_simple;
+			}else{
+				updatePolicies[user->activeID][u_it->first] = policy;				
+			}
+			u_it++;
 		}
 	}
 	return ret;
@@ -205,29 +319,39 @@ std::unordered_map<std::string, std::string> SqlProxy::create_views(SqlUser *use
 	return views;
 }
 
-void SqlProxy::get_tables(hsql::TableRef *table, std::vector<std::string>& tables){
-	if(table->type == hsql::kTableName){
+void SqlProxy::get_tables(hsql::TableRef *table, std::vector<std::string>& tables, bool update){
+	if(update){
+		assert(table != NULL);
 		std::string table_name = std::string(table->name);
-		//check if table exists in privacy policy 
-		auto found = tableRowPolicies.find(table_name);
-		if(found != tableRowPolicies.end()){
+		auto found = tableUpdatePolicies.find(table_name);
+		if(found != tableUpdatePolicies.end()){
 			//there is a policy for this table 
 			tables.push_back(table_name);
-		}else{
-			auto found2 = tableColPolicies.find(table_name);
-			if(found2 != tableColPolicies.end()){
+		}
+	}else{
+		if(table->type == hsql::kTableName){
+			std::string table_name = std::string(table->name);
+			//check if table exists in privacy policy 
+			auto found = tableRowPolicies.find(table_name);
+			if(found != tableRowPolicies.end()){
+				//there is a policy for this table 
 				tables.push_back(table_name);
+			}else{
+				auto found2 = tableColPolicies.find(table_name);
+				if(found2 != tableColPolicies.end()){
+					tables.push_back(table_name);
+				}
 			}
+		}else if(table->type == hsql::kTableJoin){
+			get_tables(table->join->left, tables, false);
+			get_tables(table->join->right, tables, false);
+		}else if(table->type == hsql::kTableCrossProduct){
+			for(hsql::TableRef* tbl : *table->list){
+				get_tables(tbl, tables, false);
+			}
+		}else if(table->type == hsql::kTableSelect){
+			get_tables(table->select->fromTable, tables, false);
 		}
-	}else if(table->type == hsql::kTableJoin){
-		get_tables(table->join->left, tables);
-		get_tables(table->join->right, tables);
-	}else if(table->type == hsql::kTableCrossProduct){
-		for(hsql::TableRef* tbl : *table->list){
-			get_tables(tbl, tables);
-		}
-	}else if(table->type == hsql::kTableSelect){
-		get_tables(table->select->fromTable, tables);
 	}
 }
 
@@ -263,11 +387,27 @@ std::string SqlProxy::add_policy(SqlUser *user, std::string command){
     	const hsql::SelectStatement *select_stmt = (const hsql::SelectStatement*) stmt;
     	//get all tables from this query 
     	std::vector<std::string> tables;
-    	get_tables(select_stmt->fromTable, tables);
+    	get_tables(select_stmt->fromTable, tables, false);
     	std::unordered_map<std::string, std::string> views = create_views(user, tables);
     	std::string command2 = insert_view(user, command, views);
     	//std::cout << "Returning command " << command2 << std::endl;
     	return command2;
+    }else if(stmt->type() == hsql::kStmtUpdate){
+    	const hsql::UpdateStatement *update_stmt = (const hsql::UpdateStatement*) stmt;
+    	//get tables being updated. There will only be 1
+    	std::vector<std::string> tables;
+    	get_tables(update_stmt->table, tables, true);
+    	if(command.find("WHERE") == std::string::npos){
+    		//if no where where clause, add full policy
+    		command += " " + this->updatePolicies[user->activeID][tables[0]]; 
+    	}else{
+    		//don't need to add "WHERE" just the restriction 
+    		//policy must start with "WHERE ", so add 6 to start 
+    		std::string full = this->updatePolicies[user->activeID][tables[0]];
+    		command += " AND " + full.substr(6);
+    	}
+    	//std::cout << command << std::endl;
+    	return command;
     }else{
     	return command;
     }
@@ -326,9 +466,14 @@ std::vector<std::string> SqlProxy::execute_commands(SqlUser *user, std::string c
   	sql::ResultSet *res = NULL;
 
   	try{
-  		std::string pcommand = add_policy(user, command);
-  		if(pcommand == "panic"){
-  			return result;
+  		std::string pcommand;
+  		if(policy){
+  			pcommand = add_policy(user, command);
+  			if(pcommand == "panic"){
+  				return result;
+  			}
+  		}else{
+  			pcommand = command;
   		}
 
         stmt = user->conn->createStatement();

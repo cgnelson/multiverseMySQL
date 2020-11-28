@@ -12,9 +12,8 @@
 
 	std::vector<std::string> resp = this->proxy->execute_commands(user, command);
 	for(int i = 0; i < resp.size(); i++){
-		char *this_row = (char *)resp[i].c_str();
 		auto to_add = response->add_rows();
-		to_add->set_value(std::string(this_row));
+		to_add->set_value(resp[i]);
 	}
 
 	return ::grpc::Status::OK;
