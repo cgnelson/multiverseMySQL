@@ -5,13 +5,25 @@
 #include "multiverse_proxy.hh"
 #include <grpcpp/grpcpp.h>
 
+bool testing = false;
+
 
 ::grpc::Status MultiverseProxy::MakeQuery(::grpc::ServerContext *context, const QueryReq *request, QueryResp *response){
 	SqlUser *user = this->users[request->username()];
 	std::string command = request->query();
 
 	std::vector<std::string> resp = this->proxy->execute_commands(user, command);
-	for(int i = 0; i < resp.size(); i++){
+	int max = 0;
+	if(testing){
+		if(resp.size() < 1){
+			max = resp.size();
+		}else{
+			max = 1;
+		}
+	}else{
+		max = resp.size();
+	}
+	for(int i = 0; i < max; i++){
 		auto to_add = response->add_rows();
 		to_add->set_value(resp[i]);
 	}

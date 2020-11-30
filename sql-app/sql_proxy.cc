@@ -110,7 +110,8 @@ std::string SqlProxy::construct_user_policy(SqlUser *user, std::vector<std::stri
 }
 
 /**
- * Pre-computes some subqueries in a user's privacy policy 
+ * Pre-computes some subqueries in a user's privacy policy
+ * This was buggy, see logic moved into construct_user_policy
  */
 std::string simplify_policy(std::string init_policy, SqlUser *user){
 	// Several assumptions are made when doing this optimization:
@@ -151,6 +152,7 @@ std::string simplify_policy(std::string init_policy, SqlUser *user){
 		}
 		//make query 
 		std::string results = "";
+		bool no_res = true;
 		sql::ResultSet *res;
 		sql::Statement *stmt;
 		try{
@@ -162,6 +164,7 @@ std::string simplify_policy(std::string init_policy, SqlUser *user){
         			results += ", ";
         		}
         		results += res->getString(1);
+        		no_res = false;
         	}
     	}catch (sql::SQLException &e) {
     		std::cout << "Query Error: " << e.what();
@@ -176,7 +179,11 @@ std::string simplify_policy(std::string init_policy, SqlUser *user){
     	}
     	//std::cout << results << std::endl;
     	//add results to policy 
-    	policy += results + ")";
+    	if(no_res){
+    		policy += "' ')";
+    	}else{
+    		policy += results + ")";
+    	}
     	//update starting position 
     	start = i + 1;
     	//look again

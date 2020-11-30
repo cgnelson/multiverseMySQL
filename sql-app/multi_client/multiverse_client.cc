@@ -30,7 +30,7 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 
-	if(argc == 4){
+	if(argc == 4){ //for running experiments 
 		//start timing
 		auto start = std::chrono::high_resolution_clock::now();
 		//read commands from file

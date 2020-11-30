@@ -5,7 +5,7 @@ Multiverse database support for MySQL
 A proxy and client system for adding multiverse database to MySQL. User universes are implemented through views which sandbox a user's query to only the subset
 of rows and columns they are allowed to access by the specified privacy policy. 
 
-There are 2 run option. The first can be found in the single_client directory. Here, the main executable spawns an instance of a proxy and user instance. A client can
+There are 2 run options. The first can be found in the single_client directory. Here, the main executable spawns an instance of a proxy and user instance. A client can
 then send queries through the proxy via the command line. This implementation is primarily used for testing purposes as it can only support a single user at a time.
 
 The second run option is in the multi_client directory. Here, there are both proxy and client executable. Any number of clients can connect to the proxy. Clients can

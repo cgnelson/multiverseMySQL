@@ -1,4 +1,0 @@
-/vagrant/muliverseMySQL/sql-app/multi_client/CMakeFiles/rebuild_cache.dir
-/vagrant/muliverseMySQL/sql-app/multi_client/CMakeFiles/edit_cache.dir
-/vagrant/muliverseMySQL/sql-app/multi_client/CMakeFiles/client.dir
-/vagrant/muliverseMySQL/sql-app/multi_client/CMakeFiles/proxy.dir
