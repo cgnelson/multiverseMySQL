@@ -76,13 +76,21 @@ int generate_entry(sql::Connection *conn){
 }
 
 int main(int argc, char *argv[]){
+	if(argc != 3){
+		std::cout << "Usage: ./generator <username> <password>" << std::endl;
+		return 1;
+	}
+
+	std::string username = std::string(argv[1]);
+	std::string password = std::string(argv[2]);
+
 	srand(time(NULL));
 	sql::mysql::MySQL_Driver *driver = NULL;
 	sql::Connection *conn = NULL;
 
 	try{
 		driver = sql::mysql::get_driver_instance();
-		conn = driver->connect("tcp://127.0.0.1:3306", "demo", "casey123");
+		conn = driver->connect("tcp://127.0.0.1:3306", username, password);
 		conn->setSchema("piazza");
 	}catch (sql::SQLException &e) {
 		std::cout << "Error: " << e.what();
@@ -92,16 +100,13 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 
-	for(int i = 0; i < 100; i++){
+	for(int i = 0; i < 1; i++){
 		int ret = generate_entry(conn);
 		if(ret){
 			return ret;
 		}
 	}
 
-	if(driver != NULL){
-		delete driver;
-	}
 	if(conn != NULL){
 		delete conn;
 	}
