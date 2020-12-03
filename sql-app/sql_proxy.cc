@@ -91,17 +91,28 @@ void SqlProxy::parse_policy(std::string filename){
 std::string SqlProxy::construct_user_policy(SqlUser *user, std::vector<std::string> temp){
 	std::string result = "";
 	for(unsigned int i = 0; i < temp.size(); i++){
-		std::size_t found = temp[i].find("self");
-		if(found != std::string::npos){
-			if(temp[i] == "self"){
-				result += "'" + user->getUsername() + "' ";
-			}else{
-				if(found != 0){
-					result += temp[i].substr(0, found);
-				}
-				result += "'" + user->getUsername() + "'";
-				result += temp[i].substr(found+4, temp[i].length()-(found+4)) + " ";
+		std::size_t loc = temp[i].find("{");
+		if(loc != std::string::npos){
+			size_t start = loc;
+			std::string val = "";
+			loc++;
+			while(temp[i][loc] != '}'){
+				val += temp[i][loc];
+				loc++;
 			}
+			//here, loc is the index of the bracket, add 1 to get past bracket
+			size_t end = loc+1;
+			std::string replace = "";
+			if(start > 0){
+				replace += temp[i].substr(0, start);
+			}
+			if(val == "username"){ //this could be modified to extend to any number of saved values
+				replace += "'" + user->getUsername() + "'";
+			}
+			if(end < temp[i].length()){
+				replace += temp[i].substr(end, temp[i].length());
+			}
+			result += replace + " ";
 		}else{
 			result += temp[i] + " ";
 		}

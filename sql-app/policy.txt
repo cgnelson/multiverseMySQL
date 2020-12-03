@@ -1,12 +1,12 @@
 TABLE :
 posts
 ALLOW :
-WHERE ((visability = 1 OR username = self) AND class IN (SELECT class FROM people WHERE people.username = self)) OR (class IN (SELECT class FROM people WHERE people.username = self AND people.position = 'instructor'))
+WHERE ((visability = 1 OR username = {username}) AND class IN (SELECT class FROM people WHERE people.username = {username})) OR (class IN (SELECT class FROM people WHERE people.username = {username} AND people.position = 'instructor'))
 REWRITE username :
-CASE WHEN anon = 1 AND username != self AND class NOT IN (SELECT class FROM people WHERE people.username = self AND people.position = 'instructor') THEN 'anonymous' ELSE username END
+CASE WHEN anon = 1 AND username != {username} AND class NOT IN (SELECT class FROM people WHERE people.username = {username} AND people.position = 'instructor') THEN 'anonymous' ELSE username END
 MOD :
-WHERE (username = self) OR (class IN (SELECT class FROM people WHERE people.username = self AND people.position = 'instructor'))
+WHERE (username = {username}) OR (class IN (SELECT class FROM people WHERE people.username = {username} AND people.position = 'instructor'))
 TABLE :
 people
 MOD :
-WHERE (class IN (SELECT class FROM people WHERE people.username = self AND people.position = 'instructor'))
+WHERE (class IN (SELECT class FROM people WHERE people.username = {username} AND people.position = 'instructor'))
